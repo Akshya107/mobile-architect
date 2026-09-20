@@ -203,6 +203,7 @@ body {
   -webkit-backface-visibility: hidden;
   overflow: hidden;
   background: var(--paper);
+  transform: translateZ(0);
 }
 .leaf .back { transform: rotateY(180deg); }
 

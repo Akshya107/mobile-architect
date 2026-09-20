@@ -184,17 +184,15 @@
     bookEl.classList.toggle("portrait", p);
 
     if (p || index === 0 || toIndex === 0) {
-      const front = direction === "next" ? pages[index] : pages[toIndex];
-      const shownUnder = direction === "next" ? pages[toIndex] : pages[index];
       const leafClass = direction === "next" ? "full" : "full prev-full";
       bookEl.classList.toggle("closed-cover", !p && (index === 0 || toIndex === 0));
       bookEl.innerHTML = `
         <div class="spread single">
           <div class="page-slot">
-            <div class="under">${paperHtml(shownUnder)}</div>
+            <div class="under">${paperHtml(pages[index])}</div>
           </div>
           <div class="leaf ${leafClass}">
-            <div class="face front">${paperHtml(front)}</div>
+            <div class="face front">${paperHtml(pages[index])}</div>
             <div class="face back">${paperHtml(null)}</div>
             ${leafChrome()}
           </div>
@@ -204,7 +202,7 @@
       bookEl.innerHTML = `
         <div class="spread">
           <div class="page-slot left"><div class="under">${paperHtml(from.left)}</div></div>
-          <div class="page-slot right"><div class="under">${paperHtml(to.right)}</div></div>
+          <div class="page-slot right"><div class="under">${paperHtml(from.right)}</div></div>
           <div class="leaf right-leaf">
             <div class="face front">${paperHtml(from.right)}</div>
             <div class="face back">${paperHtml(to.left)}</div>
@@ -215,7 +213,7 @@
     } else {
       bookEl.innerHTML = `
         <div class="spread">
-          <div class="page-slot left"><div class="under">${paperHtml(to.left)}</div></div>
+          <div class="page-slot left"><div class="under">${paperHtml(from.left)}</div></div>
           <div class="page-slot right"><div class="under">${paperHtml(from.right)}</div></div>
           <div class="leaf left-leaf">
             <div class="face front">${paperHtml(from.left)}</div>
@@ -227,6 +225,23 @@
     }
     leafEl = bookEl.querySelector(".leaf");
     bindJumps(bookEl);
+  }
+
+  function revealDestination(direction, toIndex) {
+    const p = portrait();
+    const to = pairFor(toIndex);
+    if (p || index === 0 || toIndex === 0) {
+      const under = bookEl.querySelector(".page-slot .under");
+      if (under) under.innerHTML = paperHtml(pages[toIndex]);
+      return;
+    }
+    if (direction === "next") {
+      const right = bookEl.querySelector(".page-slot.right .under");
+      if (right) right.innerHTML = paperHtml(to.right);
+      return;
+    }
+    const left = bookEl.querySelector(".page-slot.left .under");
+    if (left) left.innerHTML = paperHtml(to.left);
   }
 
   function angleFor(direction, progress) {
@@ -250,20 +265,53 @@
     flipping = false;
     pendingIndex = null;
     bookEl.classList.remove("is-flipping", "is-dragging", "flipping-next", "flipping-prev");
-    if (leafEl) {
-      leafEl.style.transform = "";
-      leafEl.style.transformOrigin = "";
-    }
+    leafEl?.remove();
+    leafEl = null;
     index = toIndex;
+    const p = portrait();
+    const pair = pairFor(index);
+    bookEl.classList.toggle("portrait", p);
+    bookEl.classList.toggle("closed-cover", !p && index === 0);
+    if (p || index === 0) {
+      const under = bookEl.querySelector(".spread.single .under");
+      if (under) {
+        under.innerHTML = paperHtml(pages[index]);
+        bindJumps(bookEl);
+        chrome(index);
+        return;
+      }
+    } else {
+      const left = bookEl.querySelector(".page-slot.left .under");
+      const right = bookEl.querySelector(".page-slot.right .under");
+      if (left && right) {
+        left.innerHTML = paperHtml(pair.left);
+        right.innerHTML = paperHtml(pair.right);
+        bindJumps(bookEl);
+        chrome(index);
+        return;
+      }
+    }
     paint(index);
+  }
+
+  function listenLeafDone(toIndex) {
+    const done = (e) => {
+      if (e && e.propertyName && e.propertyName !== "transform") return;
+      if (e && e.target !== leafEl) return;
+      leafEl?.removeEventListener("transitionend", done);
+      finishFlip(toIndex);
+    };
+    leafEl?.addEventListener("transitionend", done);
+    window.setTimeout(() => {
+      if (flipping && pendingIndex === toIndex) finishFlip(toIndex);
+    }, 1100);
   }
 
   function animateTurn(direction) {
     const target = targetIndex(direction);
     if (target < 0 || target >= pages.length) return;
     const toIndex = align(target);
-    if (toIndex === index) return;
-    if (flipping) return;
+    if (toIndex === index || flipping) return;
 
     if (reduced()) {
       go(toIndex);
@@ -273,32 +321,22 @@
     flipping = true;
     pendingIndex = toIndex;
     mountFlip(direction, toIndex);
-    setProgress(direction, 0);
 
     requestAnimationFrame(() => {
+      revealDestination(direction, toIndex);
       requestAnimationFrame(() => {
         bookEl.classList.add("is-flipping", direction === "next" ? "flipping-next" : "flipping-prev");
         if (leafEl) leafEl.style.transform = "";
-        const done = (e) => {
-          if (e && e.target !== leafEl) return;
-          leafEl?.removeEventListener("transitionend", done);
-          finishFlip(toIndex);
-        };
-        leafEl?.addEventListener("transitionend", done);
-        window.setTimeout(() => {
-          if (flipping && pendingIndex === toIndex) finishFlip(toIndex);
-        }, 1000);
+        listenLeafDone(toIndex);
       });
     });
   }
 
   function next() {
-    if (gestureLock && flipping) return;
     animateTurn("next");
   }
 
   function prev() {
-    if (gestureLock && flipping) return;
     animateTurn("prev");
   }
 
@@ -339,17 +377,19 @@
     gestureLock = true;
     window.setTimeout(() => {
       gestureLock = false;
-    }, 450);
+    }, 500);
   }
 
   document.getElementById("nextBtn").onclick = (e) => {
     e.stopPropagation();
-    if (gestureLock) return;
+    if (gestureLock || flipping) return;
+    lockGesture();
     next();
   };
   document.getElementById("prevBtn").onclick = (e) => {
     e.stopPropagation();
-    if (gestureLock) return;
+    if (gestureLock || flipping) return;
+    lockGesture();
     prev();
   };
 
@@ -389,6 +429,10 @@
     drag.onPaper = false;
   }
 
+  function isTouchPtr(e) {
+    return e.pointerType === "touch";
+  }
+
   function onPointerDown(e) {
     if (flipping || gestureLock) return;
     if (e.target.closest("[data-jump], a, .ghost, .drawer, .search, input")) return;
@@ -405,6 +449,7 @@
   }
 
   function onPointerMove(e) {
+    if (isTouchPtr(e)) return;
     if (!drag.armed && !drag.active) return;
     if (drag.scrolling) return;
     const x = e.clientX;
@@ -436,6 +481,7 @@
       flipping = true;
       pendingIndex = align(target);
       mountFlip(direction, pendingIndex);
+      requestAnimationFrame(() => revealDestination(direction, pendingIndex));
       bookEl.classList.add("is-dragging");
       try {
         wrapEl.setPointerCapture(e.pointerId);
@@ -458,15 +504,20 @@
     const dy = e.clientY - drag.startY;
     const progress = wasActive ? dragProgress(e.clientX) : 0;
     const flick = direction === "next" ? drag.vx < -0.28 : drag.vx > 0.28;
-    const moved = Math.abs(dx) > 8 || Math.abs(dy) > 8;
+    const moved = Math.abs(dx) > 24 || Math.abs(dy) > 24;
     resetDrag();
 
     if (!wasActive) {
-      if (moved || gestureLock) return;
+      if (moved || gestureLock || flipping || isTouchPtr(e)) return;
       const rect = wrapEl.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      if (x > rect.width * 0.62) next();
-      else if (x < rect.width * 0.38) prev();
+      if (x > rect.width * 0.62) {
+        lockGesture();
+        next();
+      } else if (x < rect.width * 0.38) {
+        lockGesture();
+        prev();
+      }
       return;
     }
 
@@ -476,16 +527,7 @@
     if (commit) {
       bookEl.classList.add(direction === "next" ? "flipping-next" : "flipping-prev");
       if (leafEl) leafEl.style.transform = "";
-      const toIndex = pendingIndex;
-      const done = (ev) => {
-        if (ev && ev.target !== leafEl) return;
-        leafEl?.removeEventListener("transitionend", done);
-        finishFlip(toIndex);
-      };
-      leafEl?.addEventListener("transitionend", done);
-      window.setTimeout(() => {
-        if (flipping && pendingIndex === toIndex) finishFlip(toIndex);
-      }, 1000);
+      listenLeafDone(pendingIndex);
     } else {
       if (leafEl) leafEl.style.transform = "rotateY(0deg) translateZ(0)";
       const done = (ev) => {
@@ -502,7 +544,7 @@
           pendingIndex = null;
           paint(index);
         }
-      }, 1000);
+      }, 1100);
     }
   }
 
@@ -539,26 +581,49 @@
   }
 
   function onSwipeEnd(e) {
-    if (!swipe.tracking || flipping || drag.active) {
+    if (!swipe.tracking || flipping || drag.active || gestureLock) {
       swipe.tracking = false;
-      return;
+      return false;
     }
     swipe.tracking = false;
     const t = e.changedTouches[0];
     const dx = t.clientX - swipe.x;
     const dy = t.clientY - swipe.y;
     const dt = Date.now() - swipe.t;
-    if (dt > 900) return;
-    if (Math.abs(dx) < 40) return;
-    if (Math.abs(dx) < Math.abs(dy) * 1.1) return;
+    if (dt > 900) return false;
+    if (Math.abs(dx) < 36) return false;
+    if (Math.abs(dx) < Math.abs(dy) * 1.05) return false;
     lockGesture();
     if (dx < 0) next();
     else prev();
+    return true;
+  }
+
+  function onSwipeTap(e) {
+    if (flipping || gestureLock || drag.active) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.x;
+    const dy = t.clientY - swipe.y;
+    if (Math.abs(dx) > 24 || Math.abs(dy) > 24) return;
+    if (swipeIgnore(e.target)) return;
+    const rect = wrapEl.getBoundingClientRect();
+    const x = t.clientX - rect.left;
+    if (x > rect.width * 0.62) {
+      lockGesture();
+      next();
+    } else if (x < rect.width * 0.38) {
+      lockGesture();
+      prev();
+    }
   }
 
   const stage = document.querySelector(".stage");
   stage.addEventListener("touchstart", onSwipeStart, { passive: true });
-  stage.addEventListener("touchend", onSwipeEnd, { passive: true });
+  stage.addEventListener("touchend", (e) => {
+    const started = swipe.tracking;
+    const turned = onSwipeEnd(e);
+    if (started && !turned) onSwipeTap(e);
+  }, { passive: true });
 
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim().toLowerCase();
