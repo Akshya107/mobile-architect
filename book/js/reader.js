@@ -293,10 +293,12 @@
   }
 
   function next() {
+    if (gestureLock && flipping) return;
     animateTurn("next");
   }
 
   function prev() {
+    if (gestureLock && flipping) return;
     animateTurn("prev");
   }
 
@@ -331,12 +333,23 @@
     localStorage.setItem(STORAGE_MARK, String(index));
     folioText.textContent = "Ribbon saved";
   };
+  let gestureLock = false;
+
+  function lockGesture() {
+    gestureLock = true;
+    window.setTimeout(() => {
+      gestureLock = false;
+    }, 450);
+  }
+
   document.getElementById("nextBtn").onclick = (e) => {
     e.stopPropagation();
+    if (gestureLock) return;
     next();
   };
   document.getElementById("prevBtn").onclick = (e) => {
     e.stopPropagation();
+    if (gestureLock) return;
     prev();
   };
 
@@ -377,8 +390,8 @@
   }
 
   function onPointerDown(e) {
-    if (flipping) return;
-    if (e.target.closest("[data-jump], a, button, .drawer, .search, input")) return;
+    if (flipping || gestureLock) return;
+    if (e.target.closest("[data-jump], a, .ghost, .drawer, .search, input")) return;
     drag.armed = true;
     drag.active = false;
     drag.scrolling = false;
@@ -449,7 +462,7 @@
     resetDrag();
 
     if (!wasActive) {
-      if (moved) return;
+      if (moved || gestureLock) return;
       const rect = wrapEl.getBoundingClientRect();
       const x = e.clientX - rect.left;
       if (x > rect.width * 0.62) next();
@@ -508,6 +521,44 @@
   wrapEl.addEventListener("pointerup", onPointerUp);
   wrapEl.addEventListener("pointercancel", onPointerUp);
   document.addEventListener("touchmove", onTouchMove, { passive: false });
+
+  const swipe = { tracking: false, x: 0, y: 0, t: 0 };
+
+  function swipeIgnore(target) {
+    return Boolean(target.closest("[data-jump], a, .ghost, .drawer, .search, input"));
+  }
+
+  function onSwipeStart(e) {
+    if (flipping || drag.active) return;
+    const t = e.changedTouches[0];
+    if (swipeIgnore(e.target)) return;
+    swipe.tracking = true;
+    swipe.x = t.clientX;
+    swipe.y = t.clientY;
+    swipe.t = Date.now();
+  }
+
+  function onSwipeEnd(e) {
+    if (!swipe.tracking || flipping || drag.active) {
+      swipe.tracking = false;
+      return;
+    }
+    swipe.tracking = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipe.x;
+    const dy = t.clientY - swipe.y;
+    const dt = Date.now() - swipe.t;
+    if (dt > 900) return;
+    if (Math.abs(dx) < 40) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.1) return;
+    lockGesture();
+    if (dx < 0) next();
+    else prev();
+  }
+
+  const stage = document.querySelector(".stage");
+  stage.addEventListener("touchstart", onSwipeStart, { passive: true });
+  stage.addEventListener("touchend", onSwipeEnd, { passive: true });
 
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim().toLowerCase();
