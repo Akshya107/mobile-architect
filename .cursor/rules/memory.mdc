@@ -1,0 +1,13 @@
+---
+description: Learner profile and book progress for Mobile Architect
+alwaysApply: true
+---
+
+# Memory
+
+- **Learner:** Flutter expert, Android good, iOS basic, React Native basic.
+- **Goal:** Become a mobile architect (decisions, trade-offs, four platforms). Not syntax tutorials.
+- **Reading format:** Hostable web book (`book/`) with page-turn. Markdown lives in `content/`.
+- **Preferences:** Diagrams first, comparison strips, war-room questions, paper-book feel on desktop and phone.
+- **Volume 1 (done):** `00-start-here`, `01-software-fundamentals`, `02-architecture-patterns`, `03-mobile-foundations`.
+- **Next command:** **write volume 2** → `04-mobile-systems` (sandbox, lifecycle, permissions, push, storage).

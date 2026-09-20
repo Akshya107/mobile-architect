@@ -1,0 +1,16 @@
+---
+description: How to write Mobile Architect book volumes and keep the reader working
+alwaysApply: true
+---
+
+# Mobile Architect book
+
+Before writing, read `CURRICULUM.md`, `PROGRESS.md`, and `.cursor/rules/memory.mdc`.
+
+On **write volume N**: write that volume’s `content/` lessons complete (template below), run `npm run build`, update `PROGRESS.md` and `memory.mdc`. Do not create later volume folders.
+
+Lesson shape: picture first (mermaid), Flutter/Android mapping, four-platform strip (Android | iOS | Flutter | RN), then Mental model / Architect call / Anti-pattern / War-room. End with a cheatsheet. Use `<!-- pagebreak -->` for book pages.
+
+Voice: architect decisions, Dart/Kotlin first. No Flutter widgets 101, no Android Hello World, no empty outlines.
+
+Keep `book/` working: desktop two-page spread, mobile one-page swipe, cover → TOC → chapters. Markdown in `content/` is the source of truth.

@@ -1,0 +1,10 @@
+{
+  "name": "mobile-architect",
+  "private": true,
+  "type": "module",
+  "description": "Visual book for becoming a mobile architect",
+  "scripts": {
+    "build": "node scripts/build-book.mjs",
+    "book": "node scripts/build-book.mjs && node scripts/serve-book.mjs"
+  }
+}

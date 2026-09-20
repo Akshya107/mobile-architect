@@ -1,0 +1,493 @@
+(() => {
+  const data = window.BOOK_DATA;
+  if (!data) return;
+
+  const STORAGE_PAGE = "ma-book-page";
+  const STORAGE_MARK = "ma-book-mark";
+  const FRONT = 3;
+
+  const bookEl = document.getElementById("book");
+  const wrapEl = document.getElementById("bookWrap");
+  const running = document.getElementById("running");
+  const folioText = document.getElementById("folioText");
+  const tocNav = document.getElementById("tocNav");
+  const drawer = document.getElementById("drawer");
+  const search = document.getElementById("search");
+  const searchInput = document.getElementById("searchInput");
+  const searchHits = document.getElementById("searchHits");
+
+  const pages = [
+    {
+      kind: "cover",
+      part: "Volume I",
+      title: "Cover",
+      html: `<img src="images/cover.png" alt="Mobile Architect Volume I cover" />`,
+    },
+    {
+      kind: "imprint",
+      part: "Volume I",
+      title: "Foundations",
+      html: `<div class="imprint"><h1>Mobile Architect</h1><p>Volume I · Foundations</p><p>Software craft · Architecture patterns · Mobile foundations</p><p>A visual field book. Picture first. Then the decision.</p></div>`,
+    },
+    {
+      kind: "toc",
+      part: "Contents",
+      title: "Contents",
+      html: `<h1>Contents</h1>${tocHtml()}`,
+    },
+    ...data.pages.map((page, i) => ({
+      kind: "body",
+      part: page.part,
+      title: page.title,
+      html: page.html,
+      number: i + 1,
+    })),
+  ];
+
+  let index = clamp(Number(localStorage.getItem(STORAGE_PAGE) || 0), 0, pages.length - 1);
+  let flipping = false;
+  let leafEl = null;
+  let pendingIndex = null;
+
+  function tocHtml() {
+    return data.toc
+      .map((part) => {
+        const items = part.lessons
+          .map(
+            (l) =>
+              `<li data-jump="${FRONT + l.pageIndex}"><span>${escape(l.title)}</span></li>`
+          )
+          .join("");
+        return `<p class="toc-part">${escape(part.part)}</p><ul class="toc-list">${items}</ul>`;
+      })
+      .join("");
+  }
+
+  function escape(s) {
+    return String(s)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  function clamp(n, min, max) {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function portrait() {
+    return window.innerWidth < 860;
+  }
+
+  function reduced() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function paperHtml(page) {
+    if (!page) {
+      return `<article class="paper verso"><p class="header-line">Mobile Architect</p></article>`;
+    }
+    if (page.kind === "cover") {
+      return `<article class="paper cover">${page.html}</article>`;
+    }
+    const head = page.kind === "body" ? `${page.part} · ${page.title}` : page.part;
+    const num = page.kind === "body" ? page.number : "";
+    return `<article class="paper">
+      <p class="header-line">${escape(head)}</p>
+      ${page.html}
+      <p class="folio-line">${num}</p>
+    </article>`;
+  }
+
+  function pairFor(i) {
+    if (portrait()) return { left: null, right: pages[i], single: true };
+    if (i <= 0) return { left: null, right: pages[0], single: false, closed: true };
+    return { left: pages[i], right: pages[i + 1] || null, single: false };
+  }
+
+  function chrome(i) {
+    const page = pages[i];
+    running.textContent = page?.title || "Mobile Architect";
+    folioText.textContent = portrait()
+      ? `${i + 1} / ${pages.length}`
+      : `${Math.min(i + 1, pages.length)}–${Math.min(i + (i === 0 ? 1 : 2), pages.length)} / ${pages.length}`;
+    localStorage.setItem(STORAGE_PAGE, String(i));
+  }
+
+  function bindJumps(root) {
+    root.querySelectorAll("[data-jump]").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        go(Number(el.getAttribute("data-jump")));
+      });
+    });
+  }
+
+  function leafChrome() {
+    return `<div class="curl"></div><div class="spine"></div>`;
+  }
+
+  function paint(i) {
+    const p = portrait();
+    bookEl.className = "book";
+    bookEl.classList.toggle("portrait", p);
+    bookEl.classList.toggle("closed-cover", !p && i === 0);
+    const pair = pairFor(i);
+    if (p || i === 0) {
+      bookEl.innerHTML = `
+        <div class="spread single">
+          <div class="page-slot">
+            <div class="under">${paperHtml(pages[i])}</div>
+          </div>
+        </div>
+      `;
+    } else {
+      bookEl.innerHTML = `
+        <div class="spread">
+          <div class="page-slot left"><div class="under">${paperHtml(pair.left)}</div></div>
+          <div class="page-slot right"><div class="under">${paperHtml(pair.right)}</div></div>
+        </div>
+      `;
+    }
+    leafEl = null;
+    bindJumps(bookEl);
+    chrome(i);
+  }
+
+  function step() {
+    return portrait() || index === 0 ? 1 : 2;
+  }
+
+  function align(i) {
+    if (portrait()) return clamp(i, 0, pages.length - 1);
+    if (i <= 0) return 0;
+    return clamp(i % 2 === 1 ? i : i - 1, 1, pages.length - 1);
+  }
+
+  function targetIndex(direction) {
+    if (direction === "next") return index + step();
+    if (index <= 0) return -1;
+    if (!portrait() && index === 1) return 0;
+    return index - (portrait() ? 1 : 2);
+  }
+
+  function go(i) {
+    if (flipping) return;
+    index = align(i);
+    paint(index);
+  }
+
+  function mountFlip(direction, toIndex) {
+    const p = portrait();
+    const from = pairFor(index);
+    const to = pairFor(toIndex);
+    bookEl.className = "book";
+    bookEl.classList.toggle("portrait", p);
+
+    if (p || index === 0 || toIndex === 0) {
+      const front = direction === "next" ? pages[index] : pages[toIndex];
+      const shownUnder = direction === "next" ? pages[toIndex] : pages[index];
+      const leafClass = direction === "next" ? "full" : "full prev-full";
+      bookEl.classList.toggle("closed-cover", !p && (index === 0 || toIndex === 0));
+      bookEl.innerHTML = `
+        <div class="spread single">
+          <div class="page-slot">
+            <div class="under">${paperHtml(shownUnder)}</div>
+          </div>
+          <div class="leaf ${leafClass}">
+            <div class="face front">${paperHtml(front)}</div>
+            <div class="face back">${paperHtml(null)}</div>
+            ${leafChrome()}
+          </div>
+        </div>
+      `;
+    } else if (direction === "next") {
+      bookEl.innerHTML = `
+        <div class="spread">
+          <div class="page-slot left"><div class="under">${paperHtml(from.left)}</div></div>
+          <div class="page-slot right"><div class="under">${paperHtml(to.right)}</div></div>
+          <div class="leaf right-leaf">
+            <div class="face front">${paperHtml(from.right)}</div>
+            <div class="face back">${paperHtml(to.left)}</div>
+            ${leafChrome()}
+          </div>
+        </div>
+      `;
+    } else {
+      bookEl.innerHTML = `
+        <div class="spread">
+          <div class="page-slot left"><div class="under">${paperHtml(to.left)}</div></div>
+          <div class="page-slot right"><div class="under">${paperHtml(from.right)}</div></div>
+          <div class="leaf left-leaf">
+            <div class="face front">${paperHtml(from.left)}</div>
+            <div class="face back">${paperHtml(to.right)}</div>
+            ${leafChrome()}
+          </div>
+        </div>
+      `;
+    }
+    leafEl = bookEl.querySelector(".leaf");
+    bindJumps(bookEl);
+  }
+
+  function angleFor(direction, progress) {
+    const p = Math.max(0, Math.min(1, progress));
+    if (direction === "next") return -180 * p;
+    return 180 * p;
+  }
+
+  function setProgress(direction, progress) {
+    if (!leafEl) return;
+    const origin = direction === "prev" && (portrait() || index === 0) ? "right center" : "";
+    if (origin) leafEl.style.transformOrigin = origin;
+    leafEl.style.transform = `rotateY(${angleFor(direction, progress)}deg)`;
+    const curl = leafEl.querySelector(".curl");
+    if (curl) curl.style.opacity = String(0.25 + 0.75 * Math.sin(Math.PI * progress));
+  }
+
+  function finishFlip(toIndex) {
+    flipping = false;
+    pendingIndex = null;
+    bookEl.classList.remove("is-flipping", "is-dragging", "flipping-next", "flipping-prev");
+    if (leafEl) {
+      leafEl.style.transform = "";
+      leafEl.style.transformOrigin = "";
+    }
+    index = toIndex;
+    paint(index);
+  }
+
+  function animateTurn(direction) {
+    const target = targetIndex(direction);
+    if (target < 0 || target >= pages.length) return;
+    const toIndex = align(target);
+    if (toIndex === index) return;
+    if (flipping) return;
+
+    if (reduced()) {
+      go(toIndex);
+      return;
+    }
+
+    flipping = true;
+    pendingIndex = toIndex;
+    mountFlip(direction, toIndex);
+    setProgress(direction, 0);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        bookEl.classList.add("is-flipping", direction === "next" ? "flipping-next" : "flipping-prev");
+        if (leafEl) leafEl.style.transform = "";
+        const done = (e) => {
+          if (e && e.target !== leafEl) return;
+          leafEl?.removeEventListener("transitionend", done);
+          finishFlip(toIndex);
+        };
+        leafEl?.addEventListener("transitionend", done);
+        window.setTimeout(() => {
+          if (flipping && pendingIndex === toIndex) finishFlip(toIndex);
+        }, 1000);
+      });
+    });
+  }
+
+  function next() {
+    animateTurn("next");
+  }
+
+  function prev() {
+    animateTurn("prev");
+  }
+
+  function fillToc() {
+    tocNav.innerHTML = data.toc
+      .map((part) => {
+        const links = part.lessons
+          .map((l) => `<a data-jump="${FRONT + l.pageIndex}">${escape(l.title)}</a>`)
+          .join("");
+        return `<p class="toc-part">${escape(part.part)}</p>${links}`;
+      })
+      .join("");
+    bindJumps(tocNav);
+  }
+
+  drawer.hidden = true;
+  search.hidden = true;
+
+  document.getElementById("tocBtn").onclick = (e) => {
+    e.stopPropagation();
+    search.hidden = true;
+    drawer.hidden = !drawer.hidden;
+  };
+  document.getElementById("searchBtn").onclick = (e) => {
+    e.stopPropagation();
+    drawer.hidden = true;
+    search.hidden = !search.hidden;
+    if (!search.hidden) searchInput.focus();
+  };
+  document.getElementById("bookmarkBtn").onclick = (e) => {
+    e.stopPropagation();
+    localStorage.setItem(STORAGE_MARK, String(index));
+    folioText.textContent = "Ribbon saved";
+  };
+  document.getElementById("nextBtn").onclick = (e) => {
+    e.stopPropagation();
+    next();
+  };
+  document.getElementById("prevBtn").onclick = (e) => {
+    e.stopPropagation();
+    prev();
+  };
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target === searchInput) return;
+    if (e.key === "ArrowRight") next();
+    if (e.key === "ArrowLeft") prev();
+    if (e.key === "Home") go(0);
+    if (e.key === "End") go(pages.length - 1);
+  });
+
+  const drag = {
+    active: false,
+    armed: false,
+    direction: null,
+    startX: 0,
+    lastX: 0,
+    lastT: 0,
+    vx: 0,
+    pointerId: null,
+  };
+
+  function dragProgress(x) {
+    const width = Math.max(160, wrapEl.clientWidth * (portrait() ? 0.85 : 0.45));
+    if (drag.direction === "next") return clamp((drag.startX - x) / width, 0, 1);
+    return clamp((x - drag.startX) / width, 0, 1);
+  }
+
+  function onPointerDown(e) {
+    if (flipping) return;
+    if (e.target.closest("[data-jump], a, button, .drawer, .search, input")) return;
+    drag.armed = true;
+    drag.active = false;
+    drag.direction = null;
+    drag.startX = e.clientX;
+    drag.lastX = e.clientX;
+    drag.lastT = performance.now();
+    drag.pointerId = e.pointerId;
+  }
+
+  function onPointerMove(e) {
+    if (!drag.armed && !drag.active) return;
+    const x = e.clientX;
+    const now = performance.now();
+    const dt = Math.max(1, now - drag.lastT);
+    drag.vx = (x - drag.lastX) / dt;
+    drag.lastX = x;
+    drag.lastT = now;
+
+    if (!drag.active) {
+      const dx = x - drag.startX;
+      if (Math.abs(dx) < 12) return;
+      const direction = dx < 0 ? "next" : "prev";
+      const target = targetIndex(direction);
+      if (target < 0 || target >= pages.length) {
+        drag.armed = false;
+        return;
+      }
+      drag.active = true;
+      drag.direction = direction;
+      flipping = true;
+      pendingIndex = align(target);
+      mountFlip(direction, pendingIndex);
+      bookEl.classList.add("is-dragging");
+      try {
+        wrapEl.setPointerCapture(e.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    e.preventDefault();
+    setProgress(drag.direction, dragProgress(x));
+  }
+
+  function onPointerUp(e) {
+    if (!drag.armed && !drag.active) return;
+    const wasActive = drag.active;
+    const direction = drag.direction;
+    const progress = wasActive ? dragProgress(e.clientX) : 0;
+    const flick = direction === "next" ? drag.vx < -0.35 : drag.vx > 0.35;
+    drag.armed = false;
+    drag.active = false;
+
+    if (!wasActive) {
+      const rect = wrapEl.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (x > rect.width * 0.62) next();
+      else if (x < rect.width * 0.38) prev();
+      return;
+    }
+
+    const commit = progress > 0.28 || flick;
+    bookEl.classList.remove("is-dragging");
+    bookEl.classList.add("is-flipping");
+    if (commit) {
+      bookEl.classList.add(direction === "next" ? "flipping-next" : "flipping-prev");
+      if (leafEl) leafEl.style.transform = "";
+      const toIndex = pendingIndex;
+      const done = (ev) => {
+        if (ev && ev.target !== leafEl) return;
+        leafEl?.removeEventListener("transitionend", done);
+        finishFlip(toIndex);
+      };
+      leafEl?.addEventListener("transitionend", done);
+      window.setTimeout(() => {
+        if (flipping && pendingIndex === toIndex) finishFlip(toIndex);
+      }, 1000);
+    } else {
+      if (leafEl) leafEl.style.transform = "rotateY(0deg)";
+      const done = (ev) => {
+        if (ev && ev.target !== leafEl) return;
+        leafEl?.removeEventListener("transitionend", done);
+        flipping = false;
+        pendingIndex = null;
+        paint(index);
+      };
+      leafEl?.addEventListener("transitionend", done);
+      window.setTimeout(() => {
+        if (bookEl.classList.contains("is-flipping")) {
+          flipping = false;
+          pendingIndex = null;
+          paint(index);
+        }
+      }, 1000);
+    }
+  }
+
+  wrapEl.addEventListener("pointerdown", onPointerDown);
+  wrapEl.addEventListener("pointermove", onPointerMove, { passive: false });
+  wrapEl.addEventListener("pointerup", onPointerUp);
+  wrapEl.addEventListener("pointercancel", onPointerUp);
+  wrapEl.style.touchAction = "pan-y";
+
+  searchInput.addEventListener("input", () => {
+    const q = searchInput.value.trim().toLowerCase();
+    searchHits.innerHTML = "";
+    if (q.length < 2) return;
+    const hits = [];
+    data.pages.forEach((page, i) => {
+      const text = `${page.title} ${page.html}`.replace(/<[^>]+>/g, " ").toLowerCase();
+      if (text.includes(q)) hits.push({ title: page.title, i: FRONT + i });
+    });
+    searchHits.innerHTML = hits
+      .slice(0, 12)
+      .map((h) => `<li><a data-jump="${h.i}">${escape(h.title)}</a></li>`)
+      .join("");
+    bindJumps(searchHits);
+  });
+
+  window.addEventListener("resize", () => {
+    if (!flipping) paint(align(index));
+  });
+
+  fillToc();
+  paint(align(index));
+})();

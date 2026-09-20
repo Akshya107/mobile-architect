@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Mobile Architect · Volume I</title>
+    <link rel="stylesheet" href="css/book.css" />
+  </head>
+  <body>
+    <div class="desk" id="app">
+      <header class="chrome">
+        <button type="button" id="tocBtn" class="ghost">Contents</button>
+        <p class="running" id="running">Mobile Architect</p>
+        <div class="chrome-right">
+          <button type="button" id="searchBtn" class="ghost">Search</button>
+          <button type="button" id="bookmarkBtn" class="ghost">Ribbon</button>
+        </div>
+      </header>
+
+      <aside class="drawer" id="drawer" hidden>
+        <h2>Contents</h2>
+        <nav id="tocNav"></nav>
+      </aside>
+
+      <div class="search" id="search" hidden>
+        <label>Search this volume <input id="searchInput" type="search" autocomplete="off" /></label>
+        <ul id="searchHits"></ul>
+      </div>
+
+      <main class="stage">
+        <button type="button" class="edge left" id="prevBtn" aria-label="Previous page"></button>
+        <div class="book-wrap" id="bookWrap">
+          <div class="book" id="book"></div>
+        </div>
+        <button type="button" class="edge right" id="nextBtn" aria-label="Next page"></button>
+      </main>
+
+      <footer class="folio">
+        <span id="folioText">1</span>
+      </footer>
+    </div>
+
+    <script src="js/pages.js"></script>
+    <script src="js/reader.js"></script>
+  </body>
+</html>
