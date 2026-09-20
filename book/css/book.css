@@ -18,7 +18,17 @@
 
 [hidden] { display: none !important; }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
+html, body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
 body {
   background:
     radial-gradient(1200px 700px at 50% 40%, #3a2d22, transparent 55%),
@@ -28,11 +38,12 @@ body {
 }
 
 .desk {
-  min-height: 100%;
-  min-height: 100dvh;
+  height: 100%;
   display: grid;
   grid-template-rows: auto 1fr auto;
   padding: 12px 16px 10px;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .chrome, .folio {
@@ -86,6 +97,8 @@ body {
   perspective: 2800px;
   perspective-origin: 50% 50%;
   min-width: 0;
+  overflow: hidden;
+  touch-action: none;
 }
 
 .book {
@@ -132,7 +145,11 @@ body {
   position: absolute;
   inset: 0;
   padding: 32px 28px 40px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   background:
     linear-gradient(90deg, rgb(90 60 20 / 0.06), transparent 10%, transparent 90%, rgb(90 60 20 / 0.06)),
     repeating-linear-gradient(0deg, transparent, transparent 27px, rgb(180 150 100 / 0.05) 28px),
@@ -198,13 +215,12 @@ body {
     linear-gradient(
       90deg,
       rgb(0 0 0 / 0) 0%,
-      rgb(0 0 0 / 0.04) 38%,
-      rgb(255 255 255 / 0.22) 49%,
-      rgb(0 0 0 / 0.28) 58%,
-      rgb(0 0 0 / 0.08) 100%
+      rgb(0 0 0 / 0.06) 36%,
+      rgb(255 255 255 / 0.28) 48%,
+      rgb(0 0 0 / 0.38) 62%,
+      rgb(0 0 0 / 0.1) 100%
     );
   opacity: 0;
-  mix-blend-mode: multiply;
 }
 
 .leaf .spine {
@@ -393,6 +409,8 @@ body {
   top: 56px;
   max-height: calc(100% - 90px);
   overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   background: #f7efe0;
   color: var(--ink);
   padding: 16px 18px;
@@ -427,6 +445,7 @@ body {
     padding: 0;
     height: 100%;
     height: 100dvh;
+    overflow: hidden;
   }
   .chrome, .folio {
     padding: 8px 12px;

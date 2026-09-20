@@ -237,11 +237,13 @@
 
   function setProgress(direction, progress) {
     if (!leafEl) return;
+    const p = clamp(progress, 0, 1);
     const origin = direction === "prev" && (portrait() || index === 0) ? "right center" : "";
     if (origin) leafEl.style.transformOrigin = origin;
-    leafEl.style.transform = `rotateY(${angleFor(direction, progress)}deg)`;
+    const lift = Math.sin(Math.PI * p) * 18;
+    leafEl.style.transform = `rotateY(${angleFor(direction, p)}deg) translateZ(${lift}px)`;
     const curl = leafEl.querySelector(".curl");
-    if (curl) curl.style.opacity = String(0.25 + 0.75 * Math.sin(Math.PI * progress));
+    if (curl) curl.style.opacity = String(0.2 + 0.8 * Math.sin(Math.PI * p));
   }
 
   function finishFlip(toIndex) {
@@ -349,18 +351,29 @@
   const drag = {
     active: false,
     armed: false,
+    scrolling: false,
     direction: null,
     startX: 0,
+    startY: 0,
     lastX: 0,
     lastT: 0,
     vx: 0,
+    onPaper: false,
     pointerId: null,
   };
 
   function dragProgress(x) {
-    const width = Math.max(160, wrapEl.clientWidth * (portrait() ? 0.85 : 0.45));
+    const width = Math.max(140, wrapEl.clientWidth * (portrait() ? 0.72 : 0.42));
     if (drag.direction === "next") return clamp((drag.startX - x) / width, 0, 1);
     return clamp((x - drag.startX) / width, 0, 1);
+  }
+
+  function resetDrag() {
+    drag.active = false;
+    drag.armed = false;
+    drag.scrolling = false;
+    drag.direction = null;
+    drag.onPaper = false;
   }
 
   function onPointerDown(e) {
@@ -368,16 +381,21 @@
     if (e.target.closest("[data-jump], a, button, .drawer, .search, input")) return;
     drag.armed = true;
     drag.active = false;
+    drag.scrolling = false;
     drag.direction = null;
     drag.startX = e.clientX;
+    drag.startY = e.clientY;
     drag.lastX = e.clientX;
     drag.lastT = performance.now();
+    drag.onPaper = Boolean(e.target.closest(".paper"));
     drag.pointerId = e.pointerId;
   }
 
   function onPointerMove(e) {
     if (!drag.armed && !drag.active) return;
+    if (drag.scrolling) return;
     const x = e.clientX;
+    const y = e.clientY;
     const now = performance.now();
     const dt = Math.max(1, now - drag.lastT);
     drag.vx = (x - drag.lastX) / dt;
@@ -386,7 +404,14 @@
 
     if (!drag.active) {
       const dx = x - drag.startX;
-      if (Math.abs(dx) < 12) return;
+      const dy = y - drag.startY;
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      if (Math.abs(dy) > Math.abs(dx) && drag.onPaper) {
+        drag.scrolling = true;
+        drag.armed = false;
+        return;
+      }
+      if (Math.abs(dx) <= Math.abs(dy)) return;
       const direction = dx < 0 ? "next" : "prev";
       const target = targetIndex(direction);
       if (target < 0 || target >= pages.length) {
@@ -410,15 +435,21 @@
   }
 
   function onPointerUp(e) {
-    if (!drag.armed && !drag.active) return;
+    if (!drag.armed && !drag.active) {
+      resetDrag();
+      return;
+    }
     const wasActive = drag.active;
     const direction = drag.direction;
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
     const progress = wasActive ? dragProgress(e.clientX) : 0;
-    const flick = direction === "next" ? drag.vx < -0.35 : drag.vx > 0.35;
-    drag.armed = false;
-    drag.active = false;
+    const flick = direction === "next" ? drag.vx < -0.28 : drag.vx > 0.28;
+    const moved = Math.abs(dx) > 8 || Math.abs(dy) > 8;
+    resetDrag();
 
     if (!wasActive) {
+      if (moved) return;
       const rect = wrapEl.getBoundingClientRect();
       const x = e.clientX - rect.left;
       if (x > rect.width * 0.62) next();
@@ -426,7 +457,7 @@
       return;
     }
 
-    const commit = progress > 0.28 || flick;
+    const commit = progress > 0.22 || flick;
     bookEl.classList.remove("is-dragging");
     bookEl.classList.add("is-flipping");
     if (commit) {
@@ -443,7 +474,7 @@
         if (flipping && pendingIndex === toIndex) finishFlip(toIndex);
       }, 1000);
     } else {
-      if (leafEl) leafEl.style.transform = "rotateY(0deg)";
+      if (leafEl) leafEl.style.transform = "rotateY(0deg) translateZ(0)";
       const done = (ev) => {
         if (ev && ev.target !== leafEl) return;
         leafEl?.removeEventListener("transitionend", done);
@@ -462,11 +493,21 @@
     }
   }
 
+  function onTouchMove(e) {
+    if (drag.active) {
+      e.preventDefault();
+      return;
+    }
+    if (!e.target.closest(".paper, .drawer, .search")) {
+      e.preventDefault();
+    }
+  }
+
   wrapEl.addEventListener("pointerdown", onPointerDown);
   wrapEl.addEventListener("pointermove", onPointerMove, { passive: false });
   wrapEl.addEventListener("pointerup", onPointerUp);
   wrapEl.addEventListener("pointercancel", onPointerUp);
-  wrapEl.style.touchAction = "pan-y";
+  document.addEventListener("touchmove", onTouchMove, { passive: false });
 
   searchInput.addEventListener("input", () => {
     const q = searchInput.value.trim().toLowerCase();
